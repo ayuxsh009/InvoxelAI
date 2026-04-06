@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: invoxel
+      POSTGRES_USER: invoxel
+      POSTGRES_PASSWORD: invoxel
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    image: localhost/invoxelai-backend:latest
+    build:
+      context: ./backend
+      network: host
+    env_file:
+      - ./backend/.env.example
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+    volumes:
+      - ./backend:/app
+      - ./sample_data:/sample_data
+      - ./scripts:/scripts
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+
+  frontend:
+    image: localhost/invoxelai-frontend:latest
+    build:
+      context: ./frontend
+      network: host
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
