@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import and_, func, or_, select
@@ -49,6 +49,7 @@ async def create_invoice_from_extraction(
         sgst=parsed.get("sgst"),
         igst=parsed.get("igst"),
         grand_total=parsed.get("grand_total"),
+        status="pending",
         ocr_confidence=raw.get("confidence", 0.0),
         gst_valid=gst_valid,
         gst_calculation_correct=gst_calc_ok,
@@ -62,7 +63,7 @@ async def create_invoice_from_extraction(
     return invoice
 
 
-async def list_invoices(db: AsyncSession, filters: InvoiceFilterParams) -> tuple[int, list[Invoice]]:
+def build_invoice_filter_clauses(filters: InvoiceFilterParams) -> list:
     clauses = []
     if filters.q:
         q = f"%{filters.q.strip()}%"
@@ -74,15 +75,40 @@ async def list_invoices(db: AsyncSession, filters: InvoiceFilterParams) -> tuple
             )
         )
 
+    if filters.status:
+        clauses.append(Invoice.status == filters.status)
+
+    if filters.gst_valid is not None:
+        clauses.append(Invoice.gst_valid == filters.gst_valid)
+
+    if filters.duplicate_only:
+        clauses.append(Invoice.duplicate_of_id.is_not(None))
+
     if filters.month:
         clauses.append(func.extract("month", Invoice.invoice_date) == filters.month)
     if filters.year:
         clauses.append(func.extract("year", Invoice.invoice_date) == filters.year)
 
+    if filters.start_date:
+        clauses.append(Invoice.invoice_date >= filters.start_date)
+    if filters.end_date:
+        clauses.append(Invoice.invoice_date <= filters.end_date)
+
     if filters.min_gst is not None:
-        clauses.append((func.coalesce(Invoice.cgst, 0) + func.coalesce(Invoice.sgst, 0) + func.coalesce(Invoice.igst, 0)) >= filters.min_gst)
+        clauses.append(
+            (func.coalesce(Invoice.cgst, 0) + func.coalesce(Invoice.sgst, 0) + func.coalesce(Invoice.igst, 0))
+            >= filters.min_gst
+        )
     if filters.max_gst is not None:
-        clauses.append((func.coalesce(Invoice.cgst, 0) + func.coalesce(Invoice.sgst, 0) + func.coalesce(Invoice.igst, 0)) <= filters.max_gst)
+        clauses.append(
+            (func.coalesce(Invoice.cgst, 0) + func.coalesce(Invoice.sgst, 0) + func.coalesce(Invoice.igst, 0))
+            <= filters.max_gst
+        )
+    return clauses
+
+
+async def list_invoices(db: AsyncSession, filters: InvoiceFilterParams) -> tuple[int, list[Invoice]]:
+    clauses = build_invoice_filter_clauses(filters)
 
     query = select(Invoice).options(selectinload(Invoice.items))
     count_query = select(func.count(Invoice.id))
@@ -105,4 +131,16 @@ async def get_invoice(db: AsyncSession, invoice_id: int) -> Invoice:
     invoice = result.scalar_one_or_none()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    return invoice
+
+
+async def update_invoice_status(db: AsyncSession, invoice_id: int, status: str, paid_at: datetime | None) -> Invoice:
+    invoice = await get_invoice(db, invoice_id)
+    invoice.status = status
+    if status == "paid":
+        invoice.paid_at = paid_at or datetime.now(timezone.utc)
+    else:
+        invoice.paid_at = paid_at
+    await db.commit()
+    await db.refresh(invoice)
     return invoice
