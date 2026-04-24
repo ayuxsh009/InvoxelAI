@@ -27,6 +27,9 @@ class Invoice(Base):
     igst: Mapped[float | None] = mapped_column(Float)
     grand_total: Mapped[float | None] = mapped_column(Float)
 
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     ocr_confidence: Mapped[float | None] = mapped_column(Float)
     gst_valid: Mapped[bool] = mapped_column(default=False)
     gst_calculation_correct: Mapped[bool] = mapped_column(default=False)

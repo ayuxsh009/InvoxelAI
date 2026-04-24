@@ -25,6 +25,8 @@ CREATE TABLE invoices (
   sgst DOUBLE PRECISION,
   igst DOUBLE PRECISION,
   grand_total DOUBLE PRECISION,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  paid_at TIMESTAMPTZ,
   ocr_confidence DOUBLE PRECISION,
   gst_valid BOOLEAN NOT NULL DEFAULT FALSE,
   gst_calculation_correct BOOLEAN NOT NULL DEFAULT FALSE,

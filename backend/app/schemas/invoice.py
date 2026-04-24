@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
@@ -32,6 +33,12 @@ class InvoiceCreateFromOCR(BaseModel):
     raw_ocr_json: dict | None = None
 
 
+class InvoiceStatus(str, Enum):
+    pending = "pending"
+    paid = "paid"
+    flagged = "flagged"
+
+
 class InvoiceOut(ORMModel):
     id: int
     file_name: str
@@ -45,6 +52,8 @@ class InvoiceOut(ORMModel):
     sgst: float | None = None
     igst: float | None = None
     grand_total: float | None = None
+    status: InvoiceStatus
+    paid_at: datetime | None = None
     ocr_confidence: float | None = None
     gst_valid: bool
     gst_calculation_correct: bool
@@ -58,8 +67,13 @@ class InvoiceOut(ORMModel):
 
 class InvoiceFilterParams(BaseModel):
     q: str | None = None
+    status: InvoiceStatus | None = None
+    gst_valid: bool | None = None
+    duplicate_only: bool = False
     month: int | None = Field(default=None, ge=1, le=12)
     year: int | None = Field(default=None, ge=2020, le=2100)
+    start_date: date | None = None
+    end_date: date | None = None
     min_gst: float | None = None
     max_gst: float | None = None
     page: int = Field(default=1, ge=1)
@@ -71,3 +85,8 @@ class InvoiceListResponse(BaseModel):
     page: int
     page_size: int
     results: list[InvoiceOut]
+
+
+class InvoiceStatusUpdate(BaseModel):
+    status: InvoiceStatus
+    paid_at: datetime | None = None
