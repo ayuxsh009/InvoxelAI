@@ -1,12 +1,25 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_roles
 from app.models.user import User, UserRole
-from app.schemas.invoice import InvoiceFilterParams, InvoiceListResponse, InvoiceOut
+from app.schemas.invoice import (
+    InvoiceFilterParams,
+    InvoiceListResponse,
+    InvoiceOut,
+    InvoiceStatus,
+    InvoiceStatusUpdate,
+)
 from app.services.audit_service import log_action
-from app.services.invoice_service import create_invoice_from_extraction, get_invoice, list_invoices
+from app.services.invoice_service import (
+    create_invoice_from_extraction,
+    get_invoice,
+    list_invoices,
+    update_invoice_status,
+)
 from app.services.ocr_service import OCRService
 from app.utils.file import save_upload_file
 
@@ -39,8 +52,13 @@ async def upload_invoice(
 @router.get("", response_model=InvoiceListResponse)
 async def get_invoices(
     q: str | None = Query(default=None),
+    status: InvoiceStatus | None = Query(default=None),
+    gst_valid: bool | None = Query(default=None),
+    duplicate_only: bool = Query(default=False),
     month: int | None = Query(default=None),
     year: int | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     min_gst: float | None = Query(default=None),
     max_gst: float | None = Query(default=None),
     page: int = Query(default=1, ge=1),
@@ -50,8 +68,13 @@ async def get_invoices(
 ):
     filters = InvoiceFilterParams(
         q=q,
+        status=status,
+        gst_valid=gst_valid,
+        duplicate_only=duplicate_only,
         month=month,
         year=year,
+        start_date=start_date,
+        end_date=end_date,
         min_gst=min_gst,
         max_gst=max_gst,
         page=page,
@@ -68,3 +91,22 @@ async def get_invoice_by_id(
     _: User = Depends(require_roles(UserRole.admin, UserRole.accountant)),
 ):
     return await get_invoice(db, invoice_id)
+
+
+@router.patch("/{invoice_id}/status", response_model=InvoiceOut)
+async def patch_invoice_status(
+    invoice_id: int,
+    payload: InvoiceStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.admin, UserRole.accountant)),
+):
+    invoice = await update_invoice_status(db, invoice_id, payload.status, payload.paid_at)
+    await log_action(
+        db,
+        "update_invoice_status",
+        "invoice",
+        str(invoice.id),
+        f"Updated invoice status to {invoice.status}",
+        current_user.id,
+    )
+    return invoice
