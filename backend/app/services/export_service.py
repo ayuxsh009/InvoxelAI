@@ -1,14 +1,21 @@
 import io
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.invoice import Invoice
+from app.schemas.invoice import InvoiceFilterParams
+from app.services.invoice_service import build_invoice_filter_clauses
 
 
-async def _fetch_invoice_rows(db: AsyncSession) -> list[dict]:
-    result = await db.execute(select(Invoice).order_by(Invoice.created_at.desc()))
+async def _fetch_invoice_rows(db: AsyncSession, filters: InvoiceFilterParams | None) -> list[dict]:
+    query = select(Invoice).order_by(Invoice.created_at.desc())
+    if filters:
+        clauses = build_invoice_filter_clauses(filters)
+        if clauses:
+            query = query.where(and_(*clauses))
+    result = await db.execute(query)
     invoices = result.scalars().all()
     rows: list[dict] = []
     for inv in invoices:
@@ -33,14 +40,14 @@ async def _fetch_invoice_rows(db: AsyncSession) -> list[dict]:
     return rows
 
 
-async def export_csv(db: AsyncSession) -> bytes:
-    rows = await _fetch_invoice_rows(db)
+async def export_csv(db: AsyncSession, filters: InvoiceFilterParams | None = None) -> bytes:
+    rows = await _fetch_invoice_rows(db, filters)
     df = pd.DataFrame(rows)
     return df.to_csv(index=False).encode("utf-8")
 
 
-async def export_excel(db: AsyncSession) -> bytes:
-    rows = await _fetch_invoice_rows(db)
+async def export_excel(db: AsyncSession, filters: InvoiceFilterParams | None = None) -> bytes:
+    rows = await _fetch_invoice_rows(db, filters)
     df = pd.DataFrame(rows)
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
@@ -48,6 +55,6 @@ async def export_excel(db: AsyncSession) -> bytes:
     return buffer.getvalue()
 
 
-async def export_json(db: AsyncSession) -> bytes:
-    rows = await _fetch_invoice_rows(db)
+async def export_json(db: AsyncSession, filters: InvoiceFilterParams | None = None) -> bytes:
+    rows = await _fetch_invoice_rows(db, filters)
     return pd.DataFrame(rows).to_json(orient="records", indent=2).encode("utf-8")
