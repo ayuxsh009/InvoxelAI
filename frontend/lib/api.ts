@@ -55,6 +55,10 @@ export const invoiceApi = {
   async detail(id: number) {
     const { data } = await api.get(`/invoices/${id}`);
     return data;
+  },
+  async updateStatus(id: number, payload: { status: string; paid_at?: string | null }) {
+    const { data } = await api.patch(`/invoices/${id}/status`, payload);
+    return data;
   }
 };
 

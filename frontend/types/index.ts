@@ -1,4 +1,5 @@
 export type UserRole = "admin" | "accountant";
+export type InvoiceStatus = "pending" | "paid" | "flagged";
 
 export interface User {
   id: number;
@@ -19,6 +20,8 @@ export interface Invoice {
   sgst?: number;
   igst?: number;
   grand_total?: number;
+  status: InvoiceStatus;
+  paid_at?: string | null;
   ocr_confidence?: number;
   gst_valid: boolean;
   gst_calculation_correct: boolean;
